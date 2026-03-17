@@ -2,12 +2,12 @@ from dataclasses import dataclass, field
 from Models.keypoint3d import KeyPoint3D
 import numpy as np
 
+"""
+Point clé 3D avec descripteur 64D.
+    descriptor  ↔ m_pucDesc[64]
+"""
 @dataclass
 class KeyPoint3DFull:
-    """
-    Point clé 3D avec descripteur 64D.
-      descriptor  ↔ m_pucDesc[64]
-    """
     x: float; y: float; z: float
     sigma: float; octave: int; scale_idx: int; response: float
     descriptor:  np.ndarray = field(

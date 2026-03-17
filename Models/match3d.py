@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 import numpy as np
 
+"""Correspondance entre deux points clés."""
 @dataclass
 class Match3D:
-    """Correspondance entre deux points clés."""
     idx1: int; idx2: int; dist_sqr: int; ratio: float
 
     @property

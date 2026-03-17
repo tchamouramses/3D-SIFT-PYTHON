@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
+"""Point clé 3D (avant calcul du descripteur)."""
 @dataclass
 class KeyPoint3D:
-    """Point clé 3D (avant calcul du descripteur)."""
     x: float; y: float; z: float
     sigma: float; octave: int; scale_idx: int; response: float
 
