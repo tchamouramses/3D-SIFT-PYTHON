@@ -14,29 +14,29 @@ Rejette si |D(x̂)|<contrast_thr ou trace²/det > (r+1)²/r.
 """
 def refine(dogs, s, d, h, w, config):
     n_dogs = len(dogs)
-    sh = dogs[s].squeeze().shape
-    md,mh,mw = sh[0]-2, sh[1]-2, sh[2]-2
 
-    # Valeurs par défaut pour g et off (au cas où la boucle ne s'exécute pas)
-    g   = torch.zeros(4, dtype=torch.float64)
+    g   = None
+    H   = None
     off = torch.zeros(4, dtype=torch.float64)
 
     for _ in range(config.max_iter_refine):
-        # Vérification des bornes AVANT chaque accès
-        if not (1 <= s <= n_dogs-2): return False,0.,0.,0.,0,0.
-        sh2 = dogs[s].squeeze().shape
-        if not (1 <= d <= sh2[0]-2 and
-                1 <= h <= sh2[1]-2 and
-                1 <= w <= sh2[2]-2):
-            return False,0.,0.,0.,0,0.
+        if s < 1 or s > n_dogs - 2:
+            return False, 0., 0., 0., 0, 0.
 
-        g = _grad(dogs,s,d,h,w)
-        H = _hess(dogs,s,d,h,w)
+        sh = dogs[s].squeeze().shape
+        if (d < 1 or d > sh[0] - 2 or
+            h < 1 or h > sh[1] - 2 or
+            w < 1 or w > sh[2] - 2):
+            return False, 0., 0., 0., 0, 0.
+
+        g = _grad(dogs, s, d, h, w)
+        H = _hess(dogs, s, d, h, w)
+
         try:
-            off,_,_,_ = torch.linalg.lstsq(H,-g.unsqueeze(1))
-            off = off.squeeze()
+            sol, _, _, _ = torch.linalg.lstsq(H, -g.unsqueeze(1))
+            off = sol.squeeze(1)  # (4,1) → (4,)
         except Exception:
-            return False,0.,0.,0.,0,0.
+            return False, 0., 0., 0., 0, 0.
 
         if off.abs().max() < config.offset_threshold:
             break
@@ -46,25 +46,33 @@ def refine(dogs, s, d, h, w, config):
         w += int(torch.round(off[2]).item())
         s += int(torch.round(off[3]).item())
 
-    # Vérification finale des bornes après la boucle
-    # (s, d, h, w ont peut-être été mis à jour à la dernière itération)
-    if not (1 <= s <= n_dogs-2): return False,0.,0.,0.,0,0.
-    sh3 = dogs[s].squeeze().shape
-    if not (1 <= d <= sh3[0]-2 and
-            1 <= h <= sh3[1]-2 and
-            1 <= w <= sh3[2]-2):
-        return False,0.,0.,0.,0,0.
+    # g ou H jamais calculés (max_iter_refine=0 ou sortie immédiate)
+    if g is None or H is None:
+        return False, 0., 0., 0., 0, 0.
 
-    resp = dogs[s].squeeze()[d,h,w] + 0.5*(g@off)
-    if resp.abs() < config.contrast_threshold: return False,0.,0.,0.,0,0.
+    # Vérification finale des bornes
+    if s < 1 or s > n_dogs - 2:
+        return False, 0., 0., 0., 0, 0.
+    sh = dogs[s].squeeze().shape
+    if (d < 1 or d > sh[0] - 2 or
+        h < 1 or h > sh[1] - 2 or
+        w < 1 or w > sh[2] - 2):
+        return False, 0., 0., 0., 0, 0.
 
-    H3=_hess(dogs,s,d,h,w)[:3,:3]; tr=H3.trace(); det=torch.linalg.det(H3)
-    if det<=0: return False,0.,0.,0.,0,0.
-    r=config.edge_threshold
-    if (tr**2/det)>(r+1)**2/r: return False,0.,0.,0.,0,0.
+    # Test de contraste — développement de Taylor au point affiné
+    resp = dogs[s].squeeze()[d, h, w] + 0.5 * (g @ off)
+    if resp.abs() < config.contrast_threshold:
+        return False, 0., 0., 0., 0, 0.
 
-    return True, d+off[0].item(), h+off[1].item(), w+off[2].item(), s, off[3].item()
+    # Test de courbure 3D — réutilise H déjà calculé
+    H3  = H[:3, :3]
+    tr  = H3.trace()
+    det = torch.linalg.det(H3)
+    r   = config.edge_threshold
+    if det <= 0 or tr ** 3 * r > (r + 2) ** 3 * det:
+        return False, 0., 0., 0., 0, 0.
 
+    return True, d + off[0].item(), h + off[1].item(), w + off[2].item(), s, off[3].item()
 
 
 """Détecte les points clés 3D SIFT (blocs 1-4)."""

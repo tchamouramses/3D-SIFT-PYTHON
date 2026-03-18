@@ -20,6 +20,15 @@ def _check_deps():
         print(f"[ERREUR] Dépendances manquantes : {', '.join(missing)}")
         print(f"  → pip install {' '.join(missing)}"); sys.exit(1)
 
+"""
+enregistrement des points cles dans un fichier txt pour la visualisation
+"""
+def _save_keypoints(feats, path_out):
+    with open(path_out, 'w') as f:
+        for kp in feats:
+            f.write(f"{kp.x:.4f}  {kp.y:.4f}  {kp.z:.4f}  {kp.sigma:.4f}\n")
+    print(f"  → {len(feats)} points clés sauvegardés dans '{path_out}'")
+
 
 """
 Charge un volume IRM depuis les formats suivants :
@@ -79,6 +88,10 @@ def _load_volume(path: str, downsample: bool) -> np.ndarray:
         vol = vol[::2, ::2, ::2]
         print(f"    Après ↓×2 : {vol.shape}")
 
+    vmin, vmax = vol.min(), vol.max()
+    if vmax > vmin:
+        vol = (vol - vmin) / (vmax - vmin)  # normalise vers [0, 1]
+
     return vol
 
 
@@ -90,10 +103,9 @@ def _print_single(feats, label):
     print(f"  σ  moy/min/max : {np.mean(sg):.3f}/{np.min(sg):.3f}/{np.max(sg):.3f}")
     print(f"  Réponse moy.   : {np.mean(rs):.4f}")
     print(f"  Octaves        : {sorted(set(f.octave for f in feats))}")
-    print(f"\n--- 10 premiers points clés ---")
-    for i,f in enumerate(feats[:10]):
-        print(f"  [{i+1:2d}] ({f.x:6.1f},{f.y:6.1f},{f.z:6.1f})  "
-              f"σ={f.sigma:.2f}  resp={f.response:+.4f}")
+    # Sauvegarde
+    out_path = os.path.splitext(label)[0] + "_keypoints.txt"
+    _save_keypoints(feats, out_path)
 
 
 def _print_matches(f1,f2,matches,p1,p2):
@@ -132,6 +144,7 @@ def _cli():
     cfg=SIFT3DConfig(num_octaves=args.octaves,num_scales=args.scales,
                      sigma_min=1.0,contrast_threshold=args.contrast,
                      edge_threshold=args.edge)
+    
     print("\n"+"="*55+f"\n  3D SIFT | octaves={cfg.num_octaves} scales={cfg.num_scales}"
           f" contrast={cfg.contrast_threshold} device={args.device}\n"+"="*55)
     print("\nChargement des images...")
